@@ -139,6 +139,7 @@ class CompositeField(Field):
         kwargs["db_column"] = None
         kwargs["editable"] = False
         super().__init__(**kwargs)
+        print("Constructor",names, kwargs)
         self.component_names = tuple(names)
         # this would deferred to post_init
         self.component_fields = None
@@ -147,26 +148,25 @@ class CompositeField(Field):
         return self.get_attname(), self.db_column
 
     def contribute_to_class(self, cls, name, private_only=False) -> None:
+        print("contribute_to_class", cls, name, private_only)
         # logger.info(f"{cls.__name__} {name} {cls._meta} {self}")
         self.python_type = CompositeType.namedtuple(
             f"{cls.__name__}__{name}", self.component_names
         )
-        result = super().contribute_to_class(cls, name, private_only)
+        super().contribute_to_class(cls, name, private_only)
         setattr(cls, self.attname, self.descriptor_class(self))
+
         if self.primary_key:
             cls._meta.pk = self
-        if self.unique or self.primary_key:
+        if (self.unique or self.primary_key):
             cls._meta.constraints.append(
                 UniqueConstraint(
-                    fields=self.component_names, name=f"{cls.__name__}_{name}_uniq"
+                    fields=self.component_names, name=f"{cls.__name__}_{name}_unique"
                 )
             )
-
-            # logger.info(f"{cls.__name__}: unique {cls._meta.unique_together}")
         if self.db_index:
             cls._meta.indexes.append(Index(fields=self.component_names))
 
-        return result
 
     def get_col(self, alias, output_field=None):
         if alias == self.model._meta.db_table and (
@@ -174,6 +174,13 @@ class CompositeField(Field):
         ):
             return self.cached_col
         return CompositeCol(alias, self, output_field)
+
+    def deconstruct(self):
+        name, path, args, kwargs = super().deconstruct()
+        args = list(self.component_names)
+
+        # Handle the simpler arguments    
+        return name, path, args, kwargs
 
     @cached_property
     def cached_col(self):

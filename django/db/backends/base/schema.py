@@ -102,6 +102,7 @@ class BaseDatabaseSchemaEditor:
         "UPDATE %(table)s SET %(column)s = %(default)s WHERE %(column)s IS NULL"
     )
 
+    sql_primary_key = "PRIMARY KEY (%(columns)s)"
     sql_unique_constraint = "UNIQUE (%(columns)s)%(deferrable)s"
     sql_check_constraint = "CHECK (%(check)s)"
     sql_delete_constraint = "ALTER TABLE %(table)s DROP CONSTRAINT %(name)s"
@@ -214,6 +215,7 @@ class BaseDatabaseSchemaEditor:
         for field in model._meta.local_fields:
             # SQL.
             definition, extra_params = self.column_sql(model, field)
+            print("defition & extra_params", field, "|||", definition, "|||", extra_params)
             if definition is None:
                 continue
             # Check constraints can go on the column SQL here.
@@ -262,17 +264,40 @@ class BaseDatabaseSchemaEditor:
                 )
                 if autoinc_sql:
                     self.deferred_sql.extend(autoinc_sql)
+        
         constraints = [
             constraint.constraint_sql(model, self)
             for constraint in model._meta.constraints
         ]
+
+        simple_primary_key = not any(
+            field.primary_key and field.get_internal_type() in (
+                "CompositeField",
+            ) for field in model._meta.local_fields
+        )
+
+        primary_constraint = ''
+        if not simple_primary_key:
+            primary_key_field = [field for field in model._meta.local_fields if field.primary_key][0]
+            component_fields = [model._meta.get_field(name) for name in primary_key_field.component_names]
+            component_columns = [field.column for field in component_fields]
+            primary_constraint = " " + self.sql_primary_key % {
+                "columns" :", ".join(self.quote_name(column) for column in component_columns)
+            }
+            print("primary_constraint", primary_constraint)
+    
+        print("------------------")
+        print("meta constraints", model._meta.constraints)
+        print(constraints)
+        print(column_sqls)
+        print("------------------")
         sql = self.sql_create_table % {
             "table": self.quote_name(model._meta.db_table),
             "definition": ", ".join(
-                str(constraint)
+                [str(constraint)
                 for constraint in (*column_sqls, *constraints)
-                if constraint
-            ),
+                if constraint]
+            ) + primary_constraint,
         }
         if model._meta.db_tablespace:
             tablespace_sql = self.connection.ops.tablespace_sql(
@@ -326,7 +351,11 @@ class BaseDatabaseSchemaEditor:
             yield "NOT NULL"
         elif not self.connection.features.implied_column_null:
             yield "NULL"
+        print("field field field", field.__dict__)
         if field.primary_key:
+            print("---------------------")
+            print("field.primary_key", field.primary_key)
+            print("---------------------")
             yield "PRIMARY KEY"
         elif field.unique:
             yield "UNIQUE"
@@ -441,6 +470,8 @@ class BaseDatabaseSchemaEditor:
         Create a table and any accompanying indexes or unique constraints for
         the given `model`.
         """
+        print("Creating table for model: ", model)
+        print("The model has the following fields: ", model._meta.fields)
         sql, params = self.table_sql(model)
         # Prevent using [] as params, in the case a literal '%' is used in the
         # definition.

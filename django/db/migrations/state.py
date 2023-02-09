@@ -623,7 +623,6 @@ class StateApps(Apps):
         # updating it.
         self._lock = None
         self.ready_event = None
-
         self.render_multiple([*models.values(), *self.real_models])
 
         # There shouldn't be any operations pending at this point.
@@ -662,7 +661,9 @@ class StateApps(Apps):
                 new_unrendered_models = []
                 for model in unrendered_models:
                     try:
+                        print(model)
                         model.render(self)
+                        print("rendered")
                     except InvalidBasesError:
                         new_unrendered_models.append(model)
                 if len(new_unrendered_models) == len(unrendered_models):
@@ -935,18 +936,22 @@ class ModelState:
         # First, make a Meta object
         meta_contents = {"app_label": self.app_label, "apps": apps, **self.options}
         meta = type("Meta", (), meta_contents)
+        print("meta_contents", meta_contents)
         # Then, work out our bases
         try:
             bases = tuple(
                 (apps.get_model(base) if isinstance(base, str) else base)
                 for base in self.bases
             )
+            print("bases", bases)
         except LookupError:
             raise InvalidBasesError(
                 "Cannot resolve one or more bases from %r" % (self.bases,)
             )
         # Clone fields for the body, add other bits.
+        print("self.fields", self.fields)
         body = {name: field.clone() for name, field in self.fields.items()}
+        print("body", body)
         body["Meta"] = meta
         body["__module__"] = "__fake__"
 
