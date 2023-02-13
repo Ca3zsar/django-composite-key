@@ -589,7 +589,6 @@ class Field(RegisterLookupMixin):
         Will not preserve any class attachments/attribute names.
         """
         name, path, args, kwargs = self.deconstruct()
-        print("info clone :", name, path, args, kwargs)
         return self.__class__(*args, **kwargs)
 
     def __eq__(self, other):
